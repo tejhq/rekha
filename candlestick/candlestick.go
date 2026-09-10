@@ -571,6 +571,9 @@ func (m *Model) autoTimeFormatter() TimeFormatter {
 	if a.YearDay() == b.YearDay() && a.Year() == b.Year() {
 		return func(t time.Time) string { return t.Format("15:04") }
 	}
+	if step := m.candles[m.visStart+1].Time.Sub(a); step < 24*time.Hour && b.Sub(a) < 8*24*time.Hour {
+		return func(t time.Time) string { return t.Format("Mon 15:04") }
+	}
 	if b.Sub(a) < 400*24*time.Hour {
 		return func(t time.Time) string { return t.Format("02 Jan") }
 	}

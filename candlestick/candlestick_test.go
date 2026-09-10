@@ -584,6 +584,26 @@ func TestFormingCandleKeepsPaneValues(t *testing.T) {
 	}
 }
 
+func TestMultiDayIntradayLabels(t *testing.T) {
+	m := New(120, 16, WithVolume(0), WithReadout(false))
+	var cs []Candle
+	base := time.Date(2026, 7, 29, 9, 15, 0, 0, time.UTC)
+	for d := 0; d < 3; d++ {
+		for i := 0; i < 40; i++ {
+			cs = append(cs, Candle{Time: base.AddDate(0, 0, d).Add(time.Duration(i*5) * time.Minute), Open: 1, High: 2, Low: 0.5, Close: 1.5, Volume: 1})
+		}
+	}
+	m.SetCandles(cs)
+	m.Draw()
+	var row strings.Builder
+	for x := 0; x < m.Width(); x++ {
+		row.WriteRune(m.Cell(canvas.Point{X: x, Y: m.Height() - 1}).Rune)
+	}
+	if !strings.Contains(row.String(), "Wed 09:") || !strings.Contains(row.String(), "Thu ") {
+		t.Fatalf("labels %q", row.String())
+	}
+}
+
 func TestEmptyDrawDoesNotPanic(t *testing.T) {
 	m := New(20, 6)
 	_ = m.View()
