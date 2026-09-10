@@ -85,6 +85,7 @@ type Model struct {
 	viewMax        float64
 	visStart       int
 	visEnd         int
+	pad            int
 
 	zoneManager *zone.Manager
 	zoneID      string
@@ -371,8 +372,13 @@ func (m *Model) ZoneID() string             { return m.zoneID }
 func (m *Model) computeVisible() {
 	capa := m.capacity()
 	n := len(m.candles)
+	m.pad = 0
 	if n <= capa {
 		m.visStart, m.visEnd = 0, n
+		m.pad = m.graphW - n*m.stride()
+		if m.pad < 0 {
+			m.pad = 0
+		}
 		return
 	}
 	end := n - m.offset
@@ -480,7 +486,7 @@ func (m *Model) rowPrice(row int) float64 {
 }
 
 func (m *Model) colOf(i int) int {
-	return (i - m.visStart) * m.stride()
+	return m.pad + (i-m.visStart)*m.stride()
 }
 
 func (m *Model) Draw() {
@@ -521,12 +527,14 @@ func (m *Model) drawAxes() {
 		m.TimeFormatter = m.autoTimeFormatter()
 	}
 	lastEnd := -2
+	lastLabel := ""
 	for i := m.visStart; i < m.visEnd; i++ {
 		x := m.colOf(i)
 		s := m.TimeFormatter(m.candles[i].Time)
-		if x <= lastEnd+1 || x+len(s) > w {
+		if x <= lastEnd+1 || x+len(s) > w || s == lastLabel {
 			continue
 		}
+		lastLabel = s
 		m.Canvas.SetStringWithStyle(canvas.Point{X: x, Y: m.axisY + 1}, s, m.LabelStyle)
 		m.Canvas.SetCell(canvas.Point{X: x, Y: m.axisY}, canvas.NewCellWithStyle(runes.LineHorizontalUp, m.AxisStyle))
 		lastEnd = x + len(s)

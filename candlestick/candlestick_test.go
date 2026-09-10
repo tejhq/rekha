@@ -84,7 +84,7 @@ func TestDrawCandleBodyAndWick(t *testing.T) {
 		t.Fatal("no wick or axis drawn")
 	}
 	closeRow := m.priceRow(105)
-	c := m.Cell(canvas.Point{X: 0, Y: closeRow})
+	c := m.Cell(canvas.Point{X: m.colOf(0), Y: closeRow})
 	if c.Rune != runes.FullBlock {
 		t.Fatalf("expected body at close row, got %q", c.Rune)
 	}
@@ -231,7 +231,7 @@ func TestCandleWidth(t *testing.T) {
 	m.Draw()
 	row := m.priceRow(m.candles[0].Close)
 	for k := 0; k < 3; k++ {
-		if m.Cell(canvas.Point{X: k, Y: row}).Rune != runes.FullBlock {
+		if m.Cell(canvas.Point{X: m.colOf(0) + k, Y: row}).Rune != runes.FullBlock {
 			t.Fatalf("body col %d not filled", k)
 		}
 	}
@@ -323,10 +323,10 @@ func TestMarkersPlacedAtCandle(t *testing.T) {
 	m.AddMarker("alerts", Marker{Time: cs[7].Time, Rune: '▽', Style: st, Above: true})
 	m.AddMarker("old", Marker{Time: cs[0].Time.Add(-time.Hour), Rune: 'X', Style: st})
 	m.Draw()
-	if m.Cell(canvas.Point{X: 5, Y: m.priceRow(cs[5].Low) + 1}).Rune != '▲' {
+	if m.Cell(canvas.Point{X: m.colOf(5), Y: m.priceRow(cs[5].Low) + 1}).Rune != '▲' {
 		t.Fatal("buy marker not below candle 5")
 	}
-	if m.Cell(canvas.Point{X: 7, Y: m.priceRow(cs[7].High) - 1}).Rune != '▽' {
+	if m.Cell(canvas.Point{X: m.colOf(7), Y: m.priceRow(cs[7].High) - 1}).Rune != '▽' {
 		t.Fatal("alert marker not above candle 7")
 	}
 	if hasRune(&m, 'X') {
@@ -340,6 +340,49 @@ func TestMarkersPlacedAtCandle(t *testing.T) {
 	m.Clear()
 	if len(m.Markers("alerts")) != 0 {
 		t.Fatal("Clear should drop markers")
+	}
+}
+
+func TestRepeatedTimeLabelsSuppressed(t *testing.T) {
+	m := New(80, 14, WithVolume(0), WithReadout(false))
+	var cs []Candle
+	base := time.Date(2026, 4, 9, 9, 15, 0, 0, time.UTC)
+	for i := 0; i < 60; i++ {
+		cs = append(cs, Candle{Time: base.Add(time.Duration(i) * time.Minute), Open: 1, High: 2, Low: 0.5, Close: 1.5, Volume: 1})
+	}
+	cs = append(cs, Candle{Time: base.AddDate(0, 5, 0), Open: 1, High: 2, Low: 0.5, Close: 1.5, Volume: 1})
+	m.SetCandles(cs)
+	m.Draw()
+	var row strings.Builder
+	for x := 0; x < m.Width(); x++ {
+		row.WriteRune(m.Cell(canvas.Point{X: x, Y: m.Height() - 1}).Rune)
+	}
+	if strings.Count(row.String(), "09 Apr") != 1 {
+		t.Fatalf("labels %q", row.String())
+	}
+}
+
+func TestFewCandlesRightAligned(t *testing.T) {
+	m := New(40, 12, WithVolume(0), WithReadout(false), WithLastPrice(false))
+	m.SetCandles(series(5))
+	m.Draw()
+	lastCol := m.graphW - 1
+	if m.Cell(canvas.Point{X: lastCol, Y: m.priceRow(m.candles[4].Close)}).Rune != runes.FullBlock {
+		t.Fatal("last candle should sit at the right edge")
+	}
+	if m.Cell(canvas.Point{X: 0, Y: m.priceRow(m.candles[0].Close)}).Rune == runes.FullBlock {
+		t.Fatal("first candle should not be at column 0")
+	}
+	m.SetCursor(4)
+	m.Draw()
+	found := false
+	for y := m.graphTop(); y < m.axisY; y++ {
+		if m.Cell(canvas.Point{X: lastCol, Y: y}).Rune == '┊' {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("crosshair should follow padded column")
 	}
 }
 

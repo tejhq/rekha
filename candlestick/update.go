@@ -81,7 +81,11 @@ func (m *Model) handleClick(msg tea.MouseClickMsg) {
 	}
 	x, _ := z.Pos(msg)
 	m.layout()
-	i := m.visStart + x/m.stride()
+	if x < m.pad {
+		m.ClearCursor()
+		return
+	}
+	i := m.visStart + (x-m.pad)/m.stride()
 	if i >= m.visEnd {
 		m.ClearCursor()
 		return
