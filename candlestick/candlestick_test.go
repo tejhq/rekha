@@ -2,6 +2,7 @@ package candlestick
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,8 @@ func series(n int) []Candle {
 	}
 	return cs
 }
+
+func isBody(r rune) bool { return r == runes.FullBlock || r == upperHalf || r == lowerHalf }
 
 func hasRune(m *Model, r rune) bool {
 	for y := 0; y < m.Height(); y++ {
@@ -77,16 +80,17 @@ func TestDrawCandleBodyAndWick(t *testing.T) {
 	m.Push(mk(0, 100, 110, 90, 105, 10))
 	m.Push(mk(1, 105, 115, 95, 100, 10))
 	m.Draw()
-	if !hasRune(&m, runes.FullBlock) {
+	if !hasRune(&m, runes.FullBlock) && !hasRune(&m, upperHalf) && !hasRune(&m, lowerHalf) {
 		t.Fatal("no candle body drawn")
-	}
-	if !hasRune(&m, runes.LineVertical) {
-		t.Fatal("no wick or axis drawn")
 	}
 	closeRow := m.priceRow(105)
 	c := m.Cell(canvas.Point{X: m.colOf(0), Y: closeRow})
-	if c.Rune != runes.FullBlock {
+	if !isBody(c.Rune) {
 		t.Fatalf("expected body at close row, got %q", c.Rune)
+	}
+	wick := m.Cell(canvas.Point{X: m.colOf(0), Y: m.priceRow(110)}).Rune
+	if wick != runes.LineVertical && wick != wickUp && wick != wickDown && !isBody(wick) {
+		t.Fatalf("expected wick at high, got %q", wick)
 	}
 }
 
@@ -183,12 +187,20 @@ func TestOverlayDrawn(t *testing.T) {
 	m.SetCandles(cs)
 	vals := make([]float64, len(cs))
 	for i := range cs {
-		vals[i] = cs[i].Close + 0.5
+		vals[i] = cs[i].High + 3
 	}
 	m.SetOverlay("ema9", vals, st)
 	m.Draw()
-	if !hasRune(&m, '╱') && !hasRune(&m, '╲') && !hasRune(&m, runes.LineHorizontal) {
-		t.Fatal("overlay not drawn")
+	found := false
+	for y := 0; y < m.Height(); y++ {
+		for x := 0; x < m.axisX; x++ {
+			if runes.IsBraillePattern(m.Cell(canvas.Point{X: x, Y: y}).Rune) {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("overlay not drawn as braille")
 	}
 }
 
@@ -231,7 +243,7 @@ func TestCandleWidth(t *testing.T) {
 	m.Draw()
 	row := m.priceRow(m.candles[0].Close)
 	for k := 0; k < 3; k++ {
-		if m.Cell(canvas.Point{X: m.colOf(0) + k, Y: row}).Rune != runes.FullBlock {
+		if !isBody(m.Cell(canvas.Point{X: m.colOf(0) + k, Y: row}).Rune) {
 			t.Fatalf("body col %d not filled", k)
 		}
 	}
@@ -283,10 +295,22 @@ func TestLevelsDrawnAndExpandRange(t *testing.T) {
 	m.SetLevel("stop", 80, "S 80", st)
 	m.Draw()
 	lo, _ := m.ViewRange()
-	if lo > 80 {
-		t.Fatalf("range should include level, min %v", lo)
+	if lo <= 80 {
+		t.Fatalf("range should not stretch to level, min %v", lo)
 	}
-	row := m.priceRow(80)
+	bottom := m.graphTop() + m.graphH - 1
+	var edge strings.Builder
+	for x := m.axisX + 1; x < m.Width(); x++ {
+		edge.WriteRune(m.Cell(canvas.Point{X: x, Y: bottom}).Rune)
+	}
+	if !strings.HasPrefix(edge.String(), "▼S 80") {
+		t.Fatalf("edge label %q", edge.String())
+	}
+	m.RemoveLevel("stop")
+	mid := (lo + m.viewMax) / 2
+	m.SetLevel("stop", mid, "S mid", st)
+	m.Draw()
+	row := m.priceRow(mid)
 	if m.Cell(canvas.Point{X: 0, Y: row}).Rune != '╌' {
 		t.Fatal("level line missing")
 	}
@@ -294,14 +318,14 @@ func TestLevelsDrawnAndExpandRange(t *testing.T) {
 	for x := m.axisX + 1; x < m.Width(); x++ {
 		label.WriteRune(m.Cell(canvas.Point{X: x, Y: row}).Rune)
 	}
-	if !strings.HasPrefix(label.String(), "S 80") {
+	if !strings.HasPrefix(label.String(), "S mid") {
 		t.Fatalf("label %q", label.String())
 	}
-	m.SetLevel("entry", 100, "E 100.25 long", st)
+	m.SetLevel("entry", mid, "E 100.25 long", st)
 	m.Draw()
 	label.Reset()
 	for x := m.axisX + 1; x < m.Width(); x++ {
-		label.WriteRune(m.Cell(canvas.Point{X: x, Y: m.priceRow(100)}).Rune)
+		label.WriteRune(m.Cell(canvas.Point{X: x, Y: m.priceRow(mid)}).Rune)
 	}
 	if !strings.HasPrefix(label.String(), "E 100.25 long") {
 		t.Fatalf("wide label clipped: %q", label.String())
@@ -367,10 +391,10 @@ func TestFewCandlesRightAligned(t *testing.T) {
 	m.SetCandles(series(5))
 	m.Draw()
 	lastCol := m.graphW - 1
-	if m.Cell(canvas.Point{X: lastCol, Y: m.priceRow(m.candles[4].Close)}).Rune != runes.FullBlock {
+	if !isBody(m.Cell(canvas.Point{X: lastCol, Y: m.priceRow(m.candles[4].Close)}).Rune) {
 		t.Fatal("last candle should sit at the right edge")
 	}
-	if m.Cell(canvas.Point{X: 0, Y: m.priceRow(m.candles[0].Close)}).Rune == runes.FullBlock {
+	if isBody(m.Cell(canvas.Point{X: 0, Y: m.priceRow(m.candles[0].Close)}).Rune) {
 		t.Fatal("first candle should not be at column 0")
 	}
 	m.SetCursor(4)
@@ -383,6 +407,180 @@ func TestFewCandlesRightAligned(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("crosshair should follow padded column")
+	}
+}
+
+func TestHalfBlockBodies(t *testing.T) {
+	m := New(30, 12, WithVolume(0), WithReadout(false), WithLastPrice(false), WithGrid(false))
+	m.Push(mk(0, 100, 120, 80, 100.5, 1))
+	m.Push(mk(1, 100, 120, 80, 100, 1))
+	m.Draw()
+	half := hasRune(&m, upperHalf) || hasRune(&m, lowerHalf)
+	if !half {
+		t.Fatal("tiny bodies should use half blocks")
+	}
+}
+
+func TestNiceTicks(t *testing.T) {
+	for raw, want := range map[float64]float64{0.3: 0.5, 7: 10, 12: 20, 23: 25, 40: 50, 120: 200} {
+		if got := niceStep(raw); got != want {
+			t.Fatalf("niceStep(%v)=%v want %v", raw, got, want)
+		}
+	}
+	m := New(60, 20, WithVolume(0), WithReadout(false), WithLastPrice(false))
+	m.SetCandles(series(30))
+	m.Draw()
+	var labels []string
+	for y := 0; y < m.Height(); y++ {
+		var b strings.Builder
+		for x := m.axisX + 1; x < m.Width(); x++ {
+			b.WriteRune(m.Cell(canvas.Point{X: x, Y: y}).Rune)
+		}
+		if l := strings.TrimRight(strings.ReplaceAll(b.String(), "\x00", ""), " "); l != "" {
+			labels = append(labels, l)
+		}
+	}
+	if len(labels) < 3 {
+		t.Fatalf("labels %v", labels)
+	}
+	for _, l := range labels {
+		v, err := strconv.ParseFloat(l, 64)
+		if err != nil || math.Mod(v, 0.5) != 0 {
+			t.Fatalf("tick %q not on a nice boundary", l)
+		}
+	}
+	if !hasRune(&m, '┈') {
+		t.Fatal("grid missing")
+	}
+}
+
+func TestPanesLayoutAndValues(t *testing.T) {
+	m := New(60, 24, WithVolume(2), WithReadout(false), WithLastPrice(false), WithGrid(false))
+	cs := series(30)
+	m.SetCandles(cs)
+	rsi := make([]float64, len(cs))
+	hist := make([]float64, len(cs))
+	for i := range cs {
+		rsi[i] = 30 + float64(i%40)
+		hist[i] = math.Sin(float64(i) / 4)
+	}
+	dim := lipgloss.NewStyle()
+	m.SetPane(Pane{Name: "RSI", Rows: 4, Min: 0, Max: 100,
+		Series: []PaneSeries{{Name: "rsi", Values: rsi, Style: dim}},
+		Lines:  []PaneLine{{Value: 30, Style: dim}, {Value: 70, Style: dim}}})
+	m.SetPane(Pane{Name: "MACD", Rows: 4,
+		Series: []PaneSeries{{Name: "hist", Kind: SeriesBars, Values: hist, Style: dim, Down: dim}}})
+	m.Draw()
+	if m.graphH != m.axisY-2-8 {
+		t.Fatalf("graphH %d, axisY %d", m.graphH, m.axisY)
+	}
+	if m.paneTop(0) != m.axisY-2-8 || m.paneTop(1) != m.axisY-2-4 {
+		t.Fatalf("pane tops %d %d", m.paneTop(0), m.paneTop(1))
+	}
+	var label strings.Builder
+	for x := 1; x < 20; x++ {
+		label.WriteRune(m.Cell(canvas.Point{X: x, Y: m.paneTop(0)}).Rune)
+	}
+	if !strings.HasPrefix(label.String(), "RSI  rsi ") {
+		t.Fatalf("pane label %q", label.String())
+	}
+	braille, bars := false, false
+	for y := m.paneTop(0); y < m.axisY; y++ {
+		for x := 0; x < m.axisX; x++ {
+			r := m.Cell(canvas.Point{X: x, Y: y}).Rune
+			if runes.IsBraillePattern(r) {
+				braille = true
+			}
+			if y >= m.paneTop(1) && isBody(r) {
+				bars = true
+			}
+		}
+	}
+	if !braille || !bars {
+		t.Fatalf("braille %v bars %v", braille, bars)
+	}
+	m.PushPaneValue("RSI", "rsi", 55)
+	if p := m.Pane("RSI"); p.Series[0].Values[len(p.Series[0].Values)-1] != 55 {
+		t.Fatal("push should replace value for current candle")
+	}
+	m.Push(mk(30, 1, 2, 0.5, 1.5, 1))
+	m.PushPaneValue("RSI", "rsi", 66)
+	if p := m.Pane("RSI"); len(p.Series[0].Values) != 31 {
+		t.Fatalf("values %d", len(p.Series[0].Values))
+	}
+	m.RemovePane("MACD")
+	m.Draw()
+	if m.graphH != m.axisY-2-4 {
+		t.Fatalf("graphH after remove %d", m.graphH)
+	}
+}
+
+func TestAutoWidth(t *testing.T) {
+	m := New(60, 14, WithAutoWidth(true), WithVolume(0), WithReadout(false))
+	m.SetCandles(series(5))
+	m.Draw()
+	if m.CandleWidth() != 3 {
+		t.Fatalf("width %d, want 3", m.CandleWidth())
+	}
+	m.SetCandles(series(20))
+	m.Draw()
+	if m.CandleWidth() != 1 || m.gap != 1 {
+		t.Fatalf("width %d gap %d, want 1 1", m.CandleWidth(), m.gap)
+	}
+	m.SetCandles(series(50))
+	m.Draw()
+	if m.CandleWidth() != 1 || m.gap != 0 {
+		t.Fatalf("width %d gap %d, want 1 0", m.CandleWidth(), m.gap)
+	}
+	m.SetCandleWidth(5)
+	m.SetCandles(series(5))
+	m.Draw()
+	if m.CandleWidth() != 5 {
+		t.Fatal("manual width should disable auto")
+	}
+}
+
+func TestReadoutShowsOverlays(t *testing.T) {
+	m := New(90, 14, WithVolume(0))
+	cs := series(10)
+	m.SetCandles(cs)
+	vals := make([]float64, len(cs))
+	for i := range cs {
+		vals[i] = 123.45
+	}
+	m.SetOverlay("ema9", vals, lipgloss.NewStyle())
+	m.Draw()
+	var row strings.Builder
+	for x := 0; x < m.Width(); x++ {
+		row.WriteRune(m.Cell(canvas.Point{X: x, Y: 0}).Rune)
+	}
+	if !strings.Contains(row.String(), "ema9 123.5") {
+		t.Fatalf("readout %q", row.String())
+	}
+}
+
+func TestFormingCandleKeepsPaneValues(t *testing.T) {
+	m := New(80, 20, WithVolume(0))
+	cs := series(20)
+	m.SetCandles(cs)
+	vals := make([]float64, len(cs))
+	for i := range vals {
+		vals[i] = 50
+	}
+	m.SetPane(Pane{Name: "RSI", Rows: 3, Min: 0, Max: 100, Series: []PaneSeries{{Name: "rsi", Values: vals, Style: lipgloss.NewStyle()}}})
+	m.SetOverlay("ema", vals, lipgloss.NewStyle())
+	m.Push(mk(20, 1, 2, 0.5, 1.5, 1))
+	m.Draw()
+	var row, top strings.Builder
+	for x := 0; x < m.Width(); x++ {
+		row.WriteRune(m.Cell(canvas.Point{X: x, Y: m.paneTop(0)}).Rune)
+		top.WriteRune(m.Cell(canvas.Point{X: x, Y: 0}).Rune)
+	}
+	if !strings.Contains(row.String(), "rsi 50") {
+		t.Fatalf("pane label %q", row.String())
+	}
+	if !strings.Contains(top.String(), "ema 50") {
+		t.Fatalf("readout %q", top.String())
 	}
 }
 

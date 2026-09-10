@@ -43,6 +43,7 @@ var (
 	defaultLast      = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	defaultLastLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("3"))
 	defaultReadout   = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
+	defaultGrid      = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 )
 
 type Model struct {
@@ -57,6 +58,7 @@ type Model struct {
 	LastStyle      lipgloss.Style
 	LastLabelStyle lipgloss.Style
 	ReadoutStyle   lipgloss.Style
+	GridStyle      lipgloss.Style
 	TimeFormatter  TimeFormatter
 	PriceFormatter PriceFormatter
 
@@ -64,6 +66,8 @@ type Model struct {
 	overlays     []*Overlay
 	levels       []Level
 	markers      map[string][]Marker
+	panes        []Pane
+	autoWidth    bool
 	maxCandles   int
 	candleWidth  int
 	gap          int
@@ -73,6 +77,7 @@ type Model struct {
 	showLast     bool
 	showReadout  bool
 	showVolume   bool
+	showGrid     bool
 
 	offset int
 	cursor int
@@ -104,6 +109,7 @@ func New(w, h int, opts ...Option) Model {
 		LastStyle:      defaultLast,
 		LastLabelStyle: defaultLastLabel,
 		ReadoutStyle:   defaultReadout,
+		GridStyle:      defaultGrid,
 		PriceFormatter: DefaultPriceFormatter,
 		candleWidth:    1,
 		yStep:          3,
@@ -111,6 +117,7 @@ func New(w, h int, opts ...Option) Model {
 		showLast:       true,
 		showReadout:    true,
 		showVolume:     true,
+		showGrid:       true,
 		volumeHeight:   3,
 		cursor:         -1,
 		dirty:          true,
@@ -193,6 +200,7 @@ func (m *Model) trim() {
 			o.Values = o.Values[:0]
 		}
 	}
+	m.trimPanes(drop)
 	if m.cursor >= 0 {
 		m.cursor -= drop
 		if m.cursor < 0 {
@@ -208,6 +216,7 @@ func (m *Model) Clear() {
 	}
 	m.levels = m.levels[:0]
 	m.markers = nil
+	m.clearPanes()
 	m.offset = 0
 	m.cursor = -1
 	m.dirty = true
@@ -293,10 +302,32 @@ func (m *Model) SetCandleWidth(w int) {
 		w = 1
 	}
 	m.candleWidth = w
+	m.autoWidth = false
 	m.dirty = true
 }
 
+func (m *Model) fitWidth() {
+	if !m.autoWidth {
+		return
+	}
+	n := len(m.candles)
+	m.candleWidth, m.gap = 1, 0
+	switch {
+	case n == 0:
+	case n*4 <= m.graphW:
+		m.candleWidth, m.gap = 3, 1
+	case n*2 <= m.graphW:
+		m.candleWidth, m.gap = 1, 1
+	}
+}
+
 func (m *Model) CandleWidth() int { return m.candleWidth }
+
+func (m *Model) SetVolume(rows int) {
+	m.showVolume = rows > 0
+	m.volumeHeight = rows
+	m.dirty = true
+}
 
 func (m *Model) Cursor() (Candle, int, bool) {
 	if m.cursor < 0 || m.cursor >= len(m.candles) {
@@ -401,7 +432,7 @@ func (m *Model) priceLabelWidth() int {
 		}
 	}
 	for _, lv := range m.levels {
-		if l := len([]rune(lv.Label)); l > w {
+		if l := len([]rune(lv.Label)) + 1; l > w {
 			w = l
 		}
 	}
@@ -428,12 +459,6 @@ func (m *Model) computeRange(start, end int) {
 			hi = math.Max(hi, v)
 		}
 	}
-	for _, lv := range m.levels {
-		if lv.Price > 0 {
-			lo = math.Min(lo, lv.Price)
-			hi = math.Max(hi, lv.Price)
-		}
-	}
 	pad := (hi - lo) * m.yPad
 	if pad == 0 {
 		pad = math.Max(math.Abs(hi)*0.001, 0.01)
@@ -448,8 +473,9 @@ func (m *Model) layout() {
 		top = 1
 	}
 	m.axisY = h - 2
-	m.graphH = max(m.axisY-m.volumeRows()-top, 1)
+	m.graphH = max(m.axisY-m.volumeRows()-m.paneRows()-top, 1)
 	m.graphW = max(w-8, 1)
+	m.fitWidth()
 	m.computeVisible()
 	m.computeRange(m.visStart, m.visEnd)
 	m.axisX = max(w-m.priceLabelWidth()-1, 1)
@@ -458,7 +484,7 @@ func (m *Model) layout() {
 	m.computeRange(m.visStart, m.visEnd)
 }
 
-func (m *Model) graphTop() int { return m.axisY - m.volumeRows() - m.graphH }
+func (m *Model) graphTop() int { return m.axisY - m.volumeRows() - m.paneRows() - m.graphH }
 
 func (m *Model) volumeRows() int {
 	if !m.showVolume {
@@ -495,11 +521,13 @@ func (m *Model) Draw() {
 	m.Canvas.SetStyle(m.Style)
 	m.layout()
 	m.drawAxes()
-	m.drawLastPrice()
+	m.drawGridAndTicks()
 	m.drawLevels()
+	m.drawLastPrice()
 	m.drawOverlays()
 	m.drawCandles()
 	m.drawVolume()
+	m.drawPanes()
 	m.drawMarkers()
 	m.drawCrosshair()
 	m.drawReadout()
@@ -516,12 +544,6 @@ func (m *Model) drawAxes() {
 		m.Canvas.SetCell(canvas.Point{X: x, Y: m.axisY}, canvas.NewCellWithStyle(runes.LineHorizontal, m.AxisStyle))
 	}
 	m.Canvas.SetCell(canvas.Point{X: m.axisX, Y: m.axisY}, canvas.NewCellWithStyle(runes.LineUpLeft, m.AxisStyle))
-
-	bottom := top + m.graphH - 1
-	for row := bottom; row >= top; row -= m.yStep {
-		s := m.PriceFormatter(m.rowPrice(row))
-		m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: row}, s, m.LabelStyle)
-	}
 
 	if m.TimeFormatter == nil {
 		m.TimeFormatter = m.autoTimeFormatter()
@@ -571,74 +593,6 @@ func (m *Model) drawLastPrice() {
 	m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: row}, s, m.LastLabelStyle)
 }
 
-func (m *Model) drawOverlays() {
-	for _, o := range m.overlays {
-		prevRow := -1
-		for i := m.visStart; i < m.visEnd; i++ {
-			if i >= len(o.Values) {
-				break
-			}
-			v := o.Values[i]
-			if math.IsNaN(v) || v == 0 {
-				prevRow = -1
-				continue
-			}
-			row := m.priceRow(v)
-			x := m.colOf(i)
-			r := runes.LineHorizontal
-			if i+1 < m.visEnd && i+1 < len(o.Values) && !math.IsNaN(o.Values[i+1]) && o.Values[i+1] != 0 {
-				next := m.priceRow(o.Values[i+1])
-				switch {
-				case next < row:
-					r = '╱'
-				case next > row:
-					r = '╲'
-				}
-			}
-			for k := 0; k < m.candleWidth; k++ {
-				m.Canvas.SetCell(canvas.Point{X: x + k, Y: row}, canvas.NewCellWithStyle(r, o.Style))
-			}
-			if prevRow >= 0 {
-				lo, hi := prevRow, row
-				if lo > hi {
-					lo, hi = hi, lo
-				}
-				for y := lo + 1; y < hi; y++ {
-					m.Canvas.SetCell(canvas.Point{X: x, Y: y}, canvas.NewCellWithStyle(runes.LineVertical, o.Style))
-				}
-			}
-			prevRow = row
-		}
-	}
-}
-
-func (m *Model) drawCandles() {
-	for i := m.visStart; i < m.visEnd; i++ {
-		c := m.candles[i]
-		s := m.BullStyle
-		if !c.Bull() {
-			s = m.BearStyle
-		}
-		x := m.colOf(i)
-		hiRow := m.priceRow(c.High)
-		loRow := m.priceRow(c.Low)
-		topRow := m.priceRow(math.Max(c.Open, c.Close))
-		botRow := m.priceRow(math.Min(c.Open, c.Close))
-		mid := x + m.candleWidth/2
-		for y := hiRow; y < topRow; y++ {
-			m.Canvas.SetCell(canvas.Point{X: mid, Y: y}, canvas.NewCellWithStyle(runes.LineVertical, s))
-		}
-		for y := topRow; y <= botRow; y++ {
-			for k := 0; k < m.candleWidth; k++ {
-				m.Canvas.SetCell(canvas.Point{X: x + k, Y: y}, canvas.NewCellWithStyle(runes.FullBlock, s))
-			}
-		}
-		for y := botRow + 1; y <= loRow; y++ {
-			m.Canvas.SetCell(canvas.Point{X: mid, Y: y}, canvas.NewCellWithStyle(runes.LineVertical, s))
-		}
-	}
-}
-
 func (m *Model) drawVolume() {
 	rows := m.volumeRows()
 	if rows <= 0 || m.visEnd <= m.visStart {
@@ -682,18 +636,26 @@ func (m *Model) drawCrosshair() {
 	row := m.priceRow(c.Close)
 	top := m.graphTop()
 	for y := top; y < m.axisY; y++ {
-		if m.Canvas.Cell(canvas.Point{X: x, Y: y}).Rune == runes.Null {
+		if passable(m.Canvas.Cell(canvas.Point{X: x, Y: y}).Rune) {
 			m.Canvas.SetCell(canvas.Point{X: x, Y: y}, canvas.NewCellWithStyle('┊', m.CrosshairStyle))
 		}
 	}
 	for xx := 0; xx < m.axisX; xx++ {
-		if m.Canvas.Cell(canvas.Point{X: xx, Y: row}).Rune == runes.Null {
+		if passable(m.Canvas.Cell(canvas.Point{X: xx, Y: row}).Rune) {
 			m.Canvas.SetCell(canvas.Point{X: xx, Y: row}, canvas.NewCellWithStyle('┈', m.CrosshairStyle))
 		}
 	}
 	m.Canvas.SetCell(canvas.Point{X: x, Y: m.axisY}, canvas.NewCellWithStyle(runes.LineHorizontalUp, m.CrosshairStyle))
 	s := m.PriceFormatter(c.Close)
 	m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: row}, s, m.LastLabelStyle)
+}
+
+func passable(r rune) bool {
+	switch r {
+	case runes.Null, '┈', '┄', '╌':
+		return true
+	}
+	return false
 }
 
 func (m *Model) drawReadout() {
@@ -721,10 +683,25 @@ func (m *Model) drawReadout() {
 	}
 	s := fmt.Sprintf("%s  O %s  H %s  L %s  C %s  %+.2f%%  V %s",
 		when, pf(c.Open), pf(c.High), pf(c.Low), pf(c.Close), chg, formatVolume(c.Volume))
-	if len(s) > m.Canvas.Width() {
-		s = s[:m.Canvas.Width()]
+	x := 0
+	put := func(text string, st lipgloss.Style) {
+		r := []rune(text)
+		if room := m.Canvas.Width() - x; len(r) > room {
+			if x > 0 {
+				return
+			}
+			r = r[:max(room, 0)]
+		}
+		m.Canvas.SetStringWithStyle(canvas.Point{X: x, Y: 0}, string(r), st)
+		x += len(r)
 	}
-	m.Canvas.SetStringWithStyle(canvas.Point{X: 0, Y: 0}, s, m.ReadoutStyle)
+	put(s, m.ReadoutStyle)
+	for _, o := range m.overlays {
+		if idx := m.valueIndex(len(o.Values)); idx >= 0 && valid(o.Values[idx]) && o.Values[idx] != 0 {
+			put("  ", m.ReadoutStyle)
+			put(fmt.Sprintf("%s %s", o.Name, pf(o.Values[idx])), o.Style)
+		}
+	}
 }
 
 func formatVolume(v float64) string {

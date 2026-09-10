@@ -8,7 +8,7 @@ Forked from [ntcharts](https://github.com/NimbleMarkets/ntcharts) by NimbleMarke
 
 | Package | What |
 |---|---|
-| `candlestick` | OHLC chart. Overlays, volume pane, right price axis, last price line, price levels, markers, crosshair, scroll, zoom. |
+| `candlestick` | OHLC chart. Half-block candles, braille overlays, indicator sub-panes, volume, nice price ticks with grid, last price line, price levels, markers, crosshair, scroll, zoom, auto candle width. |
 | `canvas` | Cell grid, cursor, viewport. Base for everything. |
 | `canvas/graph` | Line, braille, candlestick drawing on a canvas. |
 | `canvas/runes` | Box drawing, braille, arc rune sets. |
@@ -32,6 +32,9 @@ m.SetCandles(candles)
 m.SetOverlay("ema9", ema9, lipgloss.NewStyle().Foreground(lipgloss.Color("4")))
 m.Push(latest)
 m.PushOverlay("ema9", ema9Now)
+m.SetPane(candlestick.Pane{Name: "RSI", Rows: 3, Min: 0, Max: 100,
+	Series: []candlestick.PaneSeries{{Name: "rsi", Values: rsi, Style: blueStyle}},
+	Lines:  []candlestick.PaneLine{{Value: 30, Style: dim}, {Value: 70, Style: dim}}})
 m.SetLevel("stop", 1200, "S 1200", redStyle)
 m.AddMarker("fills", candlestick.Marker{Time: fillTime, Price: 1234.5, Rune: '▲', Style: greenStyle})
 m.Focus()

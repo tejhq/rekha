@@ -92,8 +92,33 @@ func (m *Model) indexAt(t time.Time) int {
 }
 
 func (m *Model) drawLevels() {
+	top := m.graphTop()
+	bottom := top + m.graphH - 1
+	lastRow := -10
+	if m.showLast {
+		if c, ok := m.Last(); ok && c.Close >= m.viewMin && c.Close <= m.viewMax {
+			lastRow = m.priceRow(c.Close)
+		}
+	}
 	for _, lv := range m.levels {
-		if lv.Price < m.viewMin || lv.Price > m.viewMax {
+		label := lv.Label
+		if label == "" {
+			label = m.PriceFormatter(lv.Price)
+		}
+		switch {
+		case lv.Price < m.viewMin:
+			y := bottom
+			if y == lastRow && y > top {
+				y--
+			}
+			m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: y}, "▼"+label, lv.Style)
+			continue
+		case lv.Price > m.viewMax:
+			y := top
+			if y == lastRow && y < bottom {
+				y++
+			}
+			m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: y}, "▲"+label, lv.Style)
 			continue
 		}
 		row := m.priceRow(lv.Price)
@@ -104,11 +129,15 @@ func (m *Model) drawLevels() {
 		for x := 0; x < m.axisX; x++ {
 			m.Canvas.SetCell(canvas.Point{X: x, Y: row}, canvas.NewCellWithStyle(r, lv.Style))
 		}
-		label := lv.Label
-		if label == "" {
-			label = m.PriceFormatter(lv.Price)
+		labelRow := row
+		if labelRow == lastRow {
+			if labelRow+1 <= bottom {
+				labelRow++
+			} else {
+				labelRow--
+			}
 		}
-		m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: row}, label, lv.Style)
+		m.Canvas.SetStringWithStyle(canvas.Point{X: m.axisX + 1, Y: labelRow}, label, lv.Style)
 	}
 }
 

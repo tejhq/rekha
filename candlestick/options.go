@@ -57,10 +57,16 @@ func WithYStep(n int) Option {
 	}
 }
 
-func WithYPad(f float64) Option    { return func(m *Model) { m.yPad = f } }
+func WithYPad(f float64) Option { return func(m *Model) { m.yPad = f } }
+func WithGrid(on bool) Option   { return func(m *Model) { m.showGrid = on } }
+func WithGridStyle(s lipgloss.Style) Option {
+	return func(m *Model) { m.GridStyle = s }
+}
 func WithLastPrice(on bool) Option { return func(m *Model) { m.showLast = on } }
 func WithReadout(on bool) Option   { return func(m *Model) { m.showReadout = on } }
 func WithKeyMap(k KeyMap) Option   { return func(m *Model) { m.KeyMap = k } }
 func WithZoneManager(zm *zone.Manager) Option {
 	return func(m *Model) { m.SetZoneManager(zm) }
 }
+
+func WithAutoWidth(on bool) Option { return func(m *Model) { m.autoWidth = on } }
