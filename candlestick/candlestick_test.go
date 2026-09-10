@@ -276,6 +276,73 @@ func TestDailyLabels(t *testing.T) {
 	}
 }
 
+func TestLevelsDrawnAndExpandRange(t *testing.T) {
+	st := lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	m := New(50, 16, WithVolume(0), WithReadout(false), WithLastPrice(false))
+	m.SetCandles(series(20))
+	m.SetLevel("stop", 80, "S 80", st)
+	m.Draw()
+	lo, _ := m.ViewRange()
+	if lo > 80 {
+		t.Fatalf("range should include level, min %v", lo)
+	}
+	row := m.priceRow(80)
+	if m.Cell(canvas.Point{X: 0, Y: row}).Rune != '╌' {
+		t.Fatal("level line missing")
+	}
+	var label strings.Builder
+	for x := m.axisX + 1; x < m.Width(); x++ {
+		label.WriteRune(m.Cell(canvas.Point{X: x, Y: row}).Rune)
+	}
+	if !strings.HasPrefix(label.String(), "S 80") {
+		t.Fatalf("label %q", label.String())
+	}
+	m.SetLevel("entry", 100, "E 100.25 long", st)
+	m.Draw()
+	label.Reset()
+	for x := m.axisX + 1; x < m.Width(); x++ {
+		label.WriteRune(m.Cell(canvas.Point{X: x, Y: m.priceRow(100)}).Rune)
+	}
+	if !strings.HasPrefix(label.String(), "E 100.25 long") {
+		t.Fatalf("wide label clipped: %q", label.String())
+	}
+	m.RemoveLevel("entry")
+	m.RemoveLevel("stop")
+	m.Draw()
+	if hasRune(&m, '╌') {
+		t.Fatal("level should be removed")
+	}
+}
+
+func TestMarkersPlacedAtCandle(t *testing.T) {
+	st := lipgloss.NewStyle()
+	m := New(50, 16, WithVolume(0), WithReadout(false), WithLastPrice(false))
+	cs := series(20)
+	m.SetCandles(cs)
+	m.AddMarker("fills", Marker{Time: cs[5].Time.Add(20 * time.Second), Rune: '▲', Style: st})
+	m.AddMarker("alerts", Marker{Time: cs[7].Time, Rune: '▽', Style: st, Above: true})
+	m.AddMarker("old", Marker{Time: cs[0].Time.Add(-time.Hour), Rune: 'X', Style: st})
+	m.Draw()
+	if m.Cell(canvas.Point{X: 5, Y: m.priceRow(cs[5].Low) + 1}).Rune != '▲' {
+		t.Fatal("buy marker not below candle 5")
+	}
+	if m.Cell(canvas.Point{X: 7, Y: m.priceRow(cs[7].High) - 1}).Rune != '▽' {
+		t.Fatal("alert marker not above candle 7")
+	}
+	if hasRune(&m, 'X') {
+		t.Fatal("marker before first candle should be skipped")
+	}
+	m.ClearMarkers("fills")
+	m.Draw()
+	if hasRune(&m, '▲') {
+		t.Fatal("cleared group still drawn")
+	}
+	m.Clear()
+	if len(m.Markers("alerts")) != 0 {
+		t.Fatal("Clear should drop markers")
+	}
+}
+
 func TestEmptyDrawDoesNotPanic(t *testing.T) {
 	m := New(20, 6)
 	_ = m.View()

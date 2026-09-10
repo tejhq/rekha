@@ -62,6 +62,8 @@ type Model struct {
 
 	candles      []Candle
 	overlays     []*Overlay
+	levels       []Level
+	markers      map[string][]Marker
 	maxCandles   int
 	candleWidth  int
 	gap          int
@@ -203,6 +205,8 @@ func (m *Model) Clear() {
 	for _, o := range m.overlays {
 		o.Values = o.Values[:0]
 	}
+	m.levels = m.levels[:0]
+	m.markers = nil
 	m.offset = 0
 	m.cursor = -1
 	m.dirty = true
@@ -390,6 +394,11 @@ func (m *Model) priceLabelWidth() int {
 			w = l
 		}
 	}
+	for _, lv := range m.levels {
+		if l := len([]rune(lv.Label)); l > w {
+			w = l
+		}
+	}
 	return w
 }
 
@@ -411,6 +420,12 @@ func (m *Model) computeRange(start, end int) {
 			}
 			lo = math.Min(lo, v)
 			hi = math.Max(hi, v)
+		}
+	}
+	for _, lv := range m.levels {
+		if lv.Price > 0 {
+			lo = math.Min(lo, lv.Price)
+			hi = math.Max(hi, lv.Price)
 		}
 	}
 	pad := (hi - lo) * m.yPad
@@ -475,9 +490,11 @@ func (m *Model) Draw() {
 	m.layout()
 	m.drawAxes()
 	m.drawLastPrice()
+	m.drawLevels()
 	m.drawOverlays()
 	m.drawCandles()
 	m.drawVolume()
+	m.drawMarkers()
 	m.drawCrosshair()
 	m.drawReadout()
 }
