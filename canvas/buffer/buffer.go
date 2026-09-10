@@ -4,7 +4,7 @@
 package buffer
 
 import (
-	"github.com/NimbleMarkets/ntcharts/v2/canvas"
+	"github.com/tejhq/rekha/canvas"
 )
 
 // Float64ScaleBuffer is a variable size buffer

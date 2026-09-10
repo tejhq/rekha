@@ -3,8 +3,8 @@
 package streamlinechart
 
 import (
-	"github.com/NimbleMarkets/ntcharts/v2/canvas/runes"
-	"github.com/NimbleMarkets/ntcharts/v2/linechart"
+	"github.com/tejhq/rekha/canvas/runes"
+	"github.com/tejhq/rekha/linechart"
 
 	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"

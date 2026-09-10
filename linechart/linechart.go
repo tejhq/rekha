@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/NimbleMarkets/ntcharts/v2/canvas"
-	"github.com/NimbleMarkets/ntcharts/v2/canvas/graph"
-	"github.com/NimbleMarkets/ntcharts/v2/canvas/runes"
+	"github.com/tejhq/rekha/canvas"
+	"github.com/tejhq/rekha/canvas/graph"
+	"github.com/tejhq/rekha/canvas/runes"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

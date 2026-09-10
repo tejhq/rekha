@@ -10,8 +10,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/NimbleMarkets/ntcharts/v2/canvas"
-	"github.com/NimbleMarkets/ntcharts/v2/canvas/runes"
+	"github.com/tejhq/rekha/canvas"
+	"github.com/tejhq/rekha/canvas/runes"
 
 	"charm.land/lipgloss/v2"
 )

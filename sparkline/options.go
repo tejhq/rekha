@@ -3,7 +3,7 @@
 package sparkline
 
 import (
-	"github.com/NimbleMarkets/ntcharts/v2/canvas"
+	"github.com/tejhq/rekha/canvas"
 
 	"charm.land/lipgloss/v2"
 )

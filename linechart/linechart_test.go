@@ -5,7 +5,7 @@ package linechart
 import (
 	"testing"
 
-	"github.com/NimbleMarkets/ntcharts/v2/canvas"
+	"github.com/tejhq/rekha/canvas"
 )
 
 func TestNew(t *testing.T) {
