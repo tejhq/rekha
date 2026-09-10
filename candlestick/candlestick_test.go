@@ -240,6 +240,20 @@ func TestCandleWidth(t *testing.T) {
 	}
 }
 
+func TestResizeGrowsView(t *testing.T) {
+	m := New(20, 5, WithReadout(false), WithVolume(0))
+	m.SetCandles(series(30))
+	m.Resize(60, 15)
+	v := m.View()
+	lines := strings.Split(v, "\n")
+	if len(lines) != 15 {
+		t.Fatalf("rows %d, want 15", len(lines))
+	}
+	if w := lipgloss.Width(lines[0]); w != 60 {
+		t.Fatalf("width %d, want 60", w)
+	}
+}
+
 func TestEmptyDrawDoesNotPanic(t *testing.T) {
 	m := New(20, 6)
 	_ = m.View()

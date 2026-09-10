@@ -134,6 +134,8 @@ func (m *Model) Height() int { return m.Canvas.Height() }
 
 func (m *Model) Resize(w, h int) {
 	m.Canvas.Resize(w, h)
+	m.Canvas.ViewWidth = w
+	m.Canvas.ViewHeight = h
 	m.dirty = true
 }
 
