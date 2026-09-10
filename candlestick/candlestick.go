@@ -524,7 +524,7 @@ func (m *Model) autoTimeFormatter() TimeFormatter {
 	if a.YearDay() == b.YearDay() && a.Year() == b.Year() {
 		return func(t time.Time) string { return t.Format("15:04") }
 	}
-	if b.Sub(a) < 100*24*time.Hour {
+	if b.Sub(a) < 400*24*time.Hour {
 		return func(t time.Time) string { return t.Format("02 Jan") }
 	}
 	return func(t time.Time) string { return t.Format("Jan 06") }
@@ -690,8 +690,12 @@ func (m *Model) drawReadout() {
 	if c.Open != 0 {
 		chg = (c.Close - c.Open) / c.Open * 100
 	}
+	when := c.Time.Format("02 Jan 15:04")
+	if c.Time.Hour() == 0 && c.Time.Minute() == 0 {
+		when = c.Time.Format("02 Jan 2006")
+	}
 	s := fmt.Sprintf("%s  O %s  H %s  L %s  C %s  %+.2f%%  V %s",
-		c.Time.Format("02 Jan 15:04"), pf(c.Open), pf(c.High), pf(c.Low), pf(c.Close), chg, formatVolume(c.Volume))
+		when, pf(c.Open), pf(c.High), pf(c.Low), pf(c.Close), chg, formatVolume(c.Volume))
 	if len(s) > m.Canvas.Width() {
 		s = s[:m.Canvas.Width()]
 	}

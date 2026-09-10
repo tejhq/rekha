@@ -254,6 +254,28 @@ func TestResizeGrowsView(t *testing.T) {
 	}
 }
 
+func TestDailyLabels(t *testing.T) {
+	m := New(80, 16, WithVolume(0))
+	var cs []Candle
+	day := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 60; i++ {
+		cs = append(cs, Candle{Time: day.AddDate(0, 0, i*3), Open: 1, High: 2, Low: 0.5, Close: 1.5, Volume: 1})
+	}
+	m.SetCandles(cs)
+	m.Draw()
+	var top, bottom strings.Builder
+	for x := 0; x < m.Width(); x++ {
+		top.WriteRune(m.Cell(canvas.Point{X: x, Y: 0}).Rune)
+		bottom.WriteRune(m.Cell(canvas.Point{X: x, Y: m.Height() - 1}).Rune)
+	}
+	if !strings.Contains(top.String(), "2026") {
+		t.Fatalf("daily readout should show year: %q", top.String())
+	}
+	if !strings.Contains(bottom.String(), "Mar") || strings.Contains(bottom.String(), "Mar 26") {
+		t.Fatalf("labels %q", bottom.String())
+	}
+}
+
 func TestEmptyDrawDoesNotPanic(t *testing.T) {
 	m := New(20, 6)
 	_ = m.View()
