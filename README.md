@@ -8,6 +8,7 @@ Forked from [ntcharts](https://github.com/NimbleMarkets/ntcharts) by NimbleMarke
 
 | Package | What |
 |---|---|
+| `candlestick` | OHLC chart. Overlays, volume pane, right price axis, last price line, crosshair, scroll, zoom. |
 | `canvas` | Cell grid, cursor, viewport. Base for everything. |
 | `canvas/graph` | Line, braille, candlestick drawing on a canvas. |
 | `canvas/runes` | Box drawing, braille, arc rune sets. |
@@ -17,12 +18,38 @@ Forked from [ntcharts](https://github.com/NimbleMarkets/ntcharts) by NimbleMarke
 | `barchart` | Vertical and horizontal bars. |
 | `sparkline` | Inline mini chart. |
 
-Planned: `candlestick`, OHLC model with overlays, volume pane, crosshair.
-
 ## Install
 
 ```
 go get github.com/tejhq/rekha
+```
+
+## Candlestick
+
+```go
+m := candlestick.New(80, 24, candlestick.WithVolume(3))
+m.SetCandles(candles)
+m.SetOverlay("ema9", ema9, lipgloss.NewStyle().Foreground(lipgloss.Color("4")))
+m.Push(latest)
+m.PushOverlay("ema9", ema9Now)
+m.Focus()
+```
+
+Keys: `←/→` cursor, `PgUp/PgDn` scroll, `End` latest, `Esc` clear cursor, `+/-` candle width. Mouse click and wheel with a bubblezone manager.
+
+```
+08 Apr 11:05  O 24784  H 24796  L 24772  C 24784  -0.00%  V 3.00L
+                                                                ┊         │24855
+                               ████│                            ┊         │
+│││││                        │██││██│                        │││││││      │
+██████│┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈██┈┈┈─██┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈│█████████│┈┈┈┈│24784
+ ───│███                    ██  ─╱  ██╲                   ███│  ───│███   │
+╱     │██╲                 ██│ ╱     ██╲                 ██│  ─╱┊    │██╲ │
+       │█│╲               ██│ ╱      │██─╲              │█│ ─╱  ┊     │█│─│24700
+▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█    ▂▅█ │
+███▇██████▇██████▇██████▇██████▇██████▇██████▇██████▇██████▇██████▇██████▇│
+┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴┴─────┴───┘
+10:01  10:08  10:15  10:22  10:29  10:36  10:43  10:50  10:57  11:04  11:11
 ```
 
 ## License
